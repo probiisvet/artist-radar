@@ -1,0 +1,44 @@
+# Render Blueprint — declarative deploy config.
+# Usage: in Render dashboard, click "New +" → "Blueprint" → connect this repo.
+# Render will read this file and create the service automatically.
+
+services:
+  - type: web
+    name: artist-radar
+    runtime: node
+    plan: free
+    region: frankfurt   # change to your closest: oregon, ohio, frankfurt, singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: ./data/radar.db
+      # Secrets — fill these in via the Render dashboard (NEVER commit real values):
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: BANDSINTOWN_APP_ID
+        value: artist-radar
+      - key: MAX_FOLLOWERS
+        value: '500000'
+      - key: REFRESH_CRON
+        value: '0 9 * * *'
+      # Email — optional, fill in via dashboard:
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_SECURE
+        value: 'false'
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
