@@ -96,7 +96,9 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
 
   for (const { artist, category } of seen.values()) {
     if (artist.followers == null) {
+      // Unknown followers — treat as emerging (small artists often lack this data)
       nullFollowers += 1;
+      result.artists_emerging.push({ ...artist, discovery_source: category });
       continue;
     }
     if (artist.followers < minSeen) minSeen = artist.followers;
