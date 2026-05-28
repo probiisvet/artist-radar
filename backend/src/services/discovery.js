@@ -19,6 +19,8 @@ import { getDisabledCategories } from '../db/database.js';
 
 // Pagination offsets. Spotify returns 10 per page; these probe deeper
 // into the long-tail where smaller, emerging artists live.
+// Niche genres have shallow catalogues, so offset=10 already surfaces
+// emerging artists. We also grab offset=20 for extra coverage.
 const PAGE_OFFSETS = [10, 20];
 
 // Polite delay between search requests to avoid Spotify rate-limiting
@@ -27,7 +29,7 @@ const REQUEST_DELAY_MS = 200;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function discoverFromPlaylists({ maxFollowers } = {}) {
-  const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 500_000);
+  const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 1_000_000);
   const disabled = new Set(getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
 

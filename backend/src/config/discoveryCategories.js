@@ -9,20 +9,56 @@
 //   - /v1/search?type=track with year:... (400)
 //   - /v1/playlists/<spotify-owned-id>/tracks (403)
 //
-// So discovery is a plain free-text artist search per genre. Spotify
-// returns up to 20 artists ranked by relevance; we filter the result set
-// to MAX_FOLLOWERS to keep only the under-the-radar ones.
+// Strategy: use NICHE sub-genres rather than broad ones ("bedroom pop"
+// instead of "pop"). Broad genres return superstars at every offset; niche
+// genres have a shallower catalogue so even offset=10 surfaces small acts.
 
 export const DISCOVERY_CATEGORIES = [
-  { category: 'Pop',           description: 'Pop',                       genres: ['pop'] },
-  { category: 'Indie',         description: 'Indie, indie pop, bedroom pop', genres: ['indie', 'indie pop', 'bedroom pop'] },
-  { category: 'Hip-Hop / Rap', description: 'Hip-hop and rap',           genres: ['hip hop', 'rap', 'trap'] },
-  { category: 'R&B',           description: 'R&B and soul',              genres: ['r&b', 'rnb', 'soul'] },
-  { category: 'Electronic',    description: 'Electronic, dance, house',  genres: ['electronic', 'dance', 'house', 'edm'] },
-  { category: 'Country',       description: 'Country',                   genres: ['country', 'americana'] },
-  { category: 'Rock',          description: 'Rock and alternative',      genres: ['rock', 'alternative', 'indie rock'] },
-  { category: 'Latin',         description: 'Latin and reggaeton',       genres: ['latin', 'reggaeton', 'latin pop'] },
-  { category: 'K-Pop',         description: 'K-Pop',                     genres: ['k-pop', 'kpop'] },
+  {
+    category: 'Indie',
+    description: 'Indie, bedroom pop, lo-fi, dream pop',
+    genres: ['bedroom pop', 'lo-fi indie', 'dream pop', 'indie folk', 'shoegaze', 'indie pop'],
+  },
+  {
+    category: 'Hip-Hop / Rap',
+    description: 'Underground and alternative rap',
+    genres: ['underground hip hop', 'alternative hip hop', 'lo-fi hip hop', 'cloud rap', 'emo rap'],
+  },
+  {
+    category: 'R&B',
+    description: 'Alternative R&B and neo-soul',
+    genres: ['alternative r&b', 'neo soul', 'indie r&b', 'soul', 'funk'],
+  },
+  {
+    category: 'Electronic',
+    description: 'Underground electronic sub-genres',
+    genres: ['ambient', 'chillwave', 'synthwave', 'lo-fi beats', 'hyperpop', 'bedroom electronic'],
+  },
+  {
+    category: 'Country',
+    description: 'Americana, folk, alt-country',
+    genres: ['americana', 'folk', 'alt-country', 'bluegrass', 'country folk'],
+  },
+  {
+    category: 'Rock',
+    description: 'Alternative, emo, post-punk',
+    genres: ['post-punk', 'emo', 'math rock', 'indie rock', 'garage rock', 'noise pop'],
+  },
+  {
+    category: 'Latin',
+    description: 'Latin underground and regional',
+    genres: ['latin alternative', 'regional mexicano', 'latin indie', 'cumbia'],
+  },
+  {
+    category: 'Pop',
+    description: 'Art pop, indie pop, sophisti-pop',
+    genres: ['art pop', 'chamber pop', 'electropop', 'indie pop', 'chillpop'],
+  },
+  {
+    category: 'K-Pop',
+    description: 'K-Pop and K-indie',
+    genres: ['k-pop', 'k-indie', 'korean indie'],
+  },
 ];
 
 export function listCategories() {

@@ -22,14 +22,15 @@ function withGrowth(artist) {
       ((artist.followers - baseline.followers) / baseline.followers) * 100;
     popularity_change = artist.popularity - baseline.popularity;
   }
-  const maxFollowers = Number(process.env.MAX_FOLLOWERS ?? 500_000);
+  const maxFollowers = Number(process.env.MAX_FOLLOWERS ?? 1_000_000);
   return {
     ...artist,
     genres: safeParseGenres(artist.genres),
     followers_growth_pct,
     popularity_change,
     baseline_recorded_at: baseline?.recorded_at ?? null,
-    is_emerging: artist.followers != null && artist.followers < maxFollowers,
+    // null followers = unknown, treat as potentially emerging
+    is_emerging: artist.followers == null || artist.followers < maxFollowers,
   };
 }
 
