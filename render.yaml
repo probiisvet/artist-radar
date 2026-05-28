@@ -11,11 +11,15 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    disk:
+      name: radar-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_PATH
-        value: ./data/radar.db
+        value: /data/radar.db
       # Secrets — fill these in via the Render dashboard (NEVER commit real values):
       - key: SPOTIFY_CLIENT_ID
         sync: false
@@ -24,7 +28,7 @@ services:
       - key: BANDSINTOWN_APP_ID
         value: artist-radar
       - key: MAX_FOLLOWERS
-        value: '500000'
+        value: '1000000'
       - key: REFRESH_CRON
         value: '0 9 * * *'
       # Email — optional, fill in via dashboard:

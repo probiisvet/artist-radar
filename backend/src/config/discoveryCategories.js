@@ -15,49 +15,49 @@
 
 export const DISCOVERY_CATEGORIES = [
   {
+    category: 'Pop',
+    description: 'Pop — broad and niche sub-genres',
+    genres: ['pop', 'art pop', 'electropop', 'indie pop', 'bedroom pop', 'chamber pop', 'chillpop'],
+  },
+  {
     category: 'Indie',
-    description: 'Indie, bedroom pop, lo-fi, dream pop',
-    genres: ['bedroom pop', 'lo-fi indie', 'dream pop', 'indie folk', 'shoegaze', 'indie pop'],
+    description: 'Indie, lo-fi, dream pop, shoegaze',
+    genres: ['indie', 'lo-fi indie', 'dream pop', 'indie folk', 'shoegaze', 'lo-fi'],
   },
   {
     category: 'Hip-Hop / Rap',
-    description: 'Underground and alternative rap',
-    genres: ['underground hip hop', 'alternative hip hop', 'lo-fi hip hop', 'cloud rap', 'emo rap'],
+    description: 'Hip-hop, rap, and underground sub-genres',
+    genres: ['hip hop', 'rap', 'trap', 'underground hip hop', 'alternative hip hop', 'cloud rap', 'emo rap'],
   },
   {
     category: 'R&B',
-    description: 'Alternative R&B and neo-soul',
-    genres: ['alternative r&b', 'neo soul', 'indie r&b', 'soul', 'funk'],
+    description: 'R&B, soul, neo-soul',
+    genres: ['r&b', 'soul', 'alternative r&b', 'neo soul', 'indie r&b', 'funk'],
   },
   {
     category: 'Electronic',
-    description: 'Underground electronic sub-genres',
-    genres: ['ambient', 'chillwave', 'synthwave', 'lo-fi beats', 'hyperpop', 'bedroom electronic'],
+    description: 'Electronic, dance, house and underground sub-genres',
+    genres: ['electronic', 'dance', 'house', 'edm', 'ambient', 'synthwave', 'chillwave', 'hyperpop'],
   },
   {
     category: 'Country',
-    description: 'Americana, folk, alt-country',
-    genres: ['americana', 'folk', 'alt-country', 'bluegrass', 'country folk'],
+    description: 'Country, folk, americana',
+    genres: ['country', 'folk', 'americana', 'alt-country', 'bluegrass', 'country folk'],
   },
   {
     category: 'Rock',
-    description: 'Alternative, emo, post-punk',
-    genres: ['post-punk', 'emo', 'math rock', 'indie rock', 'garage rock', 'noise pop'],
+    description: 'Rock, alternative, punk and sub-genres',
+    genres: ['rock', 'alternative', 'indie rock', 'post-punk', 'emo', 'garage rock', 'math rock'],
   },
   {
     category: 'Latin',
-    description: 'Latin underground and regional',
-    genres: ['latin alternative', 'regional mexicano', 'latin indie', 'cumbia'],
-  },
-  {
-    category: 'Pop',
-    description: 'Art pop, indie pop, sophisti-pop',
-    genres: ['art pop', 'chamber pop', 'electropop', 'indie pop', 'chillpop'],
+    description: 'Latin, reggaeton, and regional',
+    genres: ['latin', 'reggaeton', 'latin pop', 'latin alternative', 'regional mexicano', 'cumbia'],
   },
   {
     category: 'K-Pop',
     description: 'K-Pop and K-indie',
-    genres: ['k-pop', 'k-indie', 'korean indie'],
+    genres: ['k-pop', 'kpop', 'k-indie', 'korean indie'],
   },
 ];
 
