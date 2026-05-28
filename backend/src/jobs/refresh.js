@@ -40,34 +40,27 @@ async function fetchFreshArtistData(stored) {
 // Refresh a single artist's stats and record a snapshot. Used by both the
 // daily job and the per-artist Refresh button on the dashboard.
 export async function refreshOneArtist(artistId) {
-  const stored = getArtist(artistId);
+  const stored = await getArtist(artistId);
   if (!stored) throw new Error(`Artist ${artistId} not found`);
 
   const fresh = await fetchFreshArtistData(stored);
 
-  // Sanity-check: never write 0/0 unless Spotify actually returned 0/0.
-  if (fresh.followers == null || fresh.popularity == null) {
-    throw new Error(
-      `Refusing to write ${stored.name}: Spotify response is missing followers/popularity`,
-    );
-  }
-
   const now = new Date().toISOString();
-  upsertArtist({
+  await upsertArtist({
     ...fresh,
-    id: stored.id, // preserve stored ID even if the search drifted
+    id: stored.id,
     source: stored.source,
     discovery_source: stored.discovery_source,
     added_at: stored.added_at,
     last_refreshed_at: now,
   });
-  recordSnapshot({
+  await recordSnapshot({
     artist_id: stored.id,
     followers: fresh.followers,
     popularity: fresh.popularity,
   });
 
-  return getArtist(stored.id);
+  return await getArtist(stored.id);
 }
 
 // Single 24h refresh cycle. Each phase is isolated so a failure in
@@ -84,7 +77,7 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
   };
 
   // ---- Phase 1: refresh stats for every tracked artist -----------------
-  const tracked = listArtists({ includeDismissed: false });
+  const tracked = await listArtists({ includeDismissed: false });
   for (const a of tracked) {
     try {
       await refreshOneArtist(a.id);
@@ -109,15 +102,15 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
       };
       const now = new Date().toISOString();
       for (const candidate of disc.artists_emerging) {
-        if (getArtist(candidate.id)) continue; // don't clobber tracked artists
-        upsertArtist({
+        if (await getArtist(candidate.id)) continue;
+        await upsertArtist({
           ...candidate,
           source: 'discovered',
           discovery_source: candidate.discovery_source,
           added_at: now,
           last_refreshed_at: now,
         });
-        recordSnapshot({
+        await recordSnapshot({
           artist_id: candidate.id,
           followers: candidate.followers,
           popularity: candidate.popularity,
@@ -132,10 +125,10 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
   }
 
   // ---- Phase 3: tour dates for every (now-current) tracked artist ------
-  for (const a of listArtists({ includeDismissed: false })) {
+  for (const a of await listArtists({ includeDismissed: false })) {
     try {
       const tours = await fetchUsTourDates(a);
-      for (const t of tours) upsertTourDate(t);
+      for (const t of tours) await upsertTourDate(t);
       summary.tours_added += tours.length;
     } catch (err) {
       summary.errors.push(`tours for ${a.name}: ${err.message}`);
@@ -144,11 +137,11 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
 
   // ---- Phase 4: email any unnotified tour dates ------------------------
   try {
-    const unnotified = listUnnotifiedTours();
+    const unnotified = await listUnnotifiedTours();
     if (unnotified.length) {
       const sentIds = await sendTourAlertEmail(unnotified);
       if (sentIds.length) {
-        markToursNotified(sentIds);
+        await markToursNotified(sentIds);
         summary.emails_sent = 1;
       }
     }

@@ -13,8 +13,8 @@ import { refreshOneArtist } from '../jobs/refresh.js';
 
 const router = Router();
 
-function withGrowth(artist) {
-  const baseline = getBaselineSnapshot(artist.id, 30);
+async function withGrowth(artist) {
+  const baseline = await getBaselineSnapshot(artist.id, 30);
   let followers_growth_pct = null;
   let popularity_change = null;
   if (baseline && baseline.followers > 0) {
@@ -43,14 +43,19 @@ function safeParseGenres(s) {
 }
 
 // GET /api/artists — list tracked artists (excludes dismissed by default)
-router.get('/', (req, res) => {
-  const includeDismissed = req.query.include_dismissed === 'true';
-  const artists = listArtists({ includeDismissed }).map(withGrowth);
-  artists.sort((a, b) => {
-    if (a.is_emerging !== b.is_emerging) return a.is_emerging ? -1 : 1;
-    return (b.popularity ?? 0) - (a.popularity ?? 0);
-  });
-  res.json({ artists });
+router.get('/', async (req, res, next) => {
+  try {
+    const includeDismissed = req.query.include_dismissed === 'true';
+    const raw = await listArtists({ includeDismissed });
+    const artists = await Promise.all(raw.map(withGrowth));
+    artists.sort((a, b) => {
+      if (a.is_emerging !== b.is_emerging) return a.is_emerging ? -1 : 1;
+      return (b.popularity ?? 0) - (a.popularity ?? 0);
+    });
+    res.json({ artists });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/artists/search?q=... — proxy Spotify search for the "Add" UI
@@ -72,26 +77,26 @@ router.post('/', async (req, res, next) => {
     const id = String(req.body?.id ?? '').trim();
     if (!id) return res.status(400).json({ error: 'id is required' });
 
-    const existing = getArtist(id);
+    const existing = await getArtist(id);
     if (existing) {
-      if (existing.dismissed) setDismissed(id, false);
-      return res.json({ artist: withGrowth(getArtist(id)), added: false });
+      if (existing.dismissed) await setDismissed(id, false);
+      return res.json({ artist: await withGrowth(await getArtist(id)), added: false });
     }
 
     const fetched = await getArtistById(id);
     const now = new Date().toISOString();
-    upsertArtist({
+    await upsertArtist({
       ...fetched,
       source: 'manual',
       added_at: now,
       last_refreshed_at: now,
     });
-    recordSnapshot({
+    await recordSnapshot({
       artist_id: fetched.id,
       followers: fetched.followers,
       popularity: fetched.popularity,
     });
-    res.status(201).json({ artist: withGrowth(getArtist(id)), added: true });
+    res.status(201).json({ artist: await withGrowth(await getArtist(id)), added: true });
   } catch (err) {
     next(err);
   }
@@ -101,28 +106,36 @@ router.post('/', async (req, res, next) => {
 router.post('/:id/refresh', async (req, res, next) => {
   try {
     const id = req.params.id;
-    if (!getArtist(id)) return res.status(404).json({ error: 'not found' });
+    if (!(await getArtist(id))) return res.status(404).json({ error: 'not found' });
     await refreshOneArtist(id);
-    res.json({ artist: withGrowth(getArtist(id)) });
+    res.json({ artist: await withGrowth(await getArtist(id)) });
   } catch (err) {
     next(err);
   }
 });
 
 // DELETE /api/artists/:id
-router.delete('/:id', (req, res) => {
-  deleteArtist(req.params.id);
-  res.json({ ok: true });
+router.delete('/:id', async (req, res, next) => {
+  try {
+    await deleteArtist(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // PATCH /api/artists/:id — { dismissed: boolean }
-router.patch('/:id', (req, res) => {
-  const id = req.params.id;
-  if (!getArtist(id)) return res.status(404).json({ error: 'not found' });
-  if (typeof req.body?.dismissed === 'boolean') {
-    setDismissed(id, req.body.dismissed);
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    if (!(await getArtist(id))) return res.status(404).json({ error: 'not found' });
+    if (typeof req.body?.dismissed === 'boolean') {
+      await setDismissed(id, req.body.dismissed);
+    }
+    res.json({ artist: await withGrowth(await getArtist(id)) });
+  } catch (err) {
+    next(err);
   }
-  res.json({ artist: withGrowth(getArtist(id)) });
 });
 
 export default router;

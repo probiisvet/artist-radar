@@ -15,9 +15,6 @@ import { runRefresh } from './jobs/refresh.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 4000);
-const DATABASE_PATH = process.env.DATABASE_PATH ?? './data/radar.db';
-
-initDb(DATABASE_PATH);
 
 const app = express();
 app.use(cors());
@@ -51,8 +48,6 @@ const distPath = path.resolve(__dirname, '../../frontend/dist');
 if (fs.existsSync(distPath)) {
   console.log(`[server] serving frontend from ${distPath}`);
   app.use(express.static(distPath));
-  // SPA fallback: any non-/api GET serves index.html so client-side
-  // routing works on direct URL hits and page reloads.
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
@@ -65,7 +60,15 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message ?? 'internal error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] Artist Radar listening on port ${PORT}`);
-  startScheduler();
-});
+// Init DB first, then start server
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`[server] Artist Radar listening on port ${PORT}`);
+      startScheduler();
+    });
+  })
+  .catch((err) => {
+    console.error('[server] DB init failed:', err);
+    process.exit(1);
+  });

@@ -5,11 +5,12 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node --experimental-sqlite src/server.js",
-    "dev": "node --experimental-sqlite --watch src/server.js",
-    "refresh": "node --experimental-sqlite src/jobs/runOnce.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "refresh": "node src/jobs/runOnce.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "artist-radar": "file:..",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
