@@ -30,7 +30,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function discoverFromPlaylists({ maxFollowers } = {}) {
   const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 1_000_000);
-  const disabled = new Set(getDisabledCategories());
+  const disabled = new Set(await getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
 
   const result = {
