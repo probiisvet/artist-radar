@@ -30,6 +30,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function discoverFromPlaylists({ maxFollowers } = {}) {
   const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 1_000_000);
+  // Artists with popularity above this are established stars, not emerging.
+  // Shakira=82, Sabrina Carpenter=87, Zara Larsson=78 — all above 65.
+  const MAX_POPULARITY = Number(process.env.MAX_POPULARITY ?? 65);
   const disabled = new Set(await getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
 
@@ -96,9 +99,12 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
 
   for (const { artist, category } of seen.values()) {
     if (artist.followers == null) {
-      // Unknown followers — treat as emerging (small artists often lack this data)
       nullFollowers += 1;
-      result.artists_emerging.push({ ...artist, discovery_source: category });
+      // Unknown followers — only include if popularity is also low/unknown
+      // (big stars like Shakira return null followers but have popularity ~80+)
+      if (artist.popularity == null || artist.popularity <= MAX_POPULARITY) {
+        result.artists_emerging.push({ ...artist, discovery_source: category });
+      }
       continue;
     }
     if (artist.followers < minSeen) minSeen = artist.followers;
@@ -114,6 +120,7 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
     else buckets.gte_5m += 1;
 
     if (artist.followers > cap) continue;
+    if (artist.popularity != null && artist.popularity > MAX_POPULARITY) continue;
     result.artists_emerging.push({
       ...artist,
       discovery_source: category,
