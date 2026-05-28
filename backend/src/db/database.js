@@ -40,11 +40,8 @@ export function getDb() {
 // ---------- Artists ----------
 
 export function upsertArtist(artist) {
-  if (artist.followers == null || artist.popularity == null) {
-    throw new Error(
-      `upsertArtist refused: ${artist.name ?? artist.id} has missing followers/popularity (would write NULL/0)`,
-    );
-  }
+  // followers / popularity can legitimately be null for some Spotify artists
+  // (the API simply omits them). We store them as NULL and display "?" in the UI.
   getDb()
     .prepare(`
       INSERT INTO artists (

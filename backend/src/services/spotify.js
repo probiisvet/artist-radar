@@ -151,7 +151,12 @@ export async function getArtistById(id) {
       `Spotify /artists/${id} returned invalid payload: ${JSON.stringify(data).slice(0, 200)}`,
     );
   }
-  return ensureStats(norm, `/v1/artists/${id}`);
+  // Some artists lack followers/popularity in the API response — allow it.
+  // The frontend already renders "?" for missing stats.
+  if (norm.followers == null || norm.popularity == null) {
+    console.warn(`[spotify] /artists/${id} missing followers/popularity for "${norm.name}" — continuing with nulls`);
+  }
+  return norm;
 }
 
 export async function getArtistsByIds(ids) {
