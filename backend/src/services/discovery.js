@@ -3,18 +3,17 @@
 // What we learned from /api/diagnostic:
 //   - search limit caps at 10 for new apps
 //   - `genre:"X"` filter WORKS on artist search
-//   - `tag:new` and `year:` filters work
-//   - /recommendations, /browse/new-releases, Spotify-owned playlists all blocked
+//   - /recommendations, /browse/new-releases, Spotify-owned playlists blocked
+//   - /v1/artists?ids= batch endpoint returns 403 for new apps
+//   - /v1/artists/{id} works but too many calls risks rate-limiting
 //
 // Strategy:
-//   1. Search genre:"X" at multiple offsets to collect candidate artist IDs
-//   2. Batch-fetch REAL artist data via /v1/artists?ids= (up to 50 per call)
-//      — search results often return null followers/popularity even for huge
-//        stars, making them indistinguishable from tiny unknown acts.
-//      — the batch endpoint always returns accurate followers + popularity.
-//   3. Filter by followers < cap AND popularity < MAX_POPULARITY.
+//   Search genre:"X" at multiple offsets. Only keep artists where the
+//   search result ITSELF includes followers + popularity. Null values mean
+//   Spotify omitted the data — we can't distinguish a tiny unknown act from
+//   a huge star (Zara Larsson, Ed Sheeran return null followers in search).
 
-import { searchArtists, getArtistsByIds } from './spotify.js';
+import { searchArtists } from './spotify.js';
 import { DISCOVERY_CATEGORIES } from '../config/discoveryCategories.js';
 import { getDisabledCategories } from '../db/database.js';
 
@@ -25,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function discoverFromPlaylists({ maxFollowers } = {}) {
   const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 1_000_000);
-  // Artists with popularity above this are established stars, not emerging.
+  // Skip artists with popularity above this — they're established stars.
   const MAX_POPULARITY = Number(process.env.MAX_POPULARITY ?? 65);
   const disabled = new Set(await getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
@@ -38,8 +37,7 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
     errors: [],
   };
 
-  // Step 1: collect candidate IDs from genre searches
-  const candidateIds = new Map(); // id -> category
+  const seen = new Map(); // artist.id -> { artist, category }
 
   for (const cat of enabled) {
     for (const genre of cat.genres) {
@@ -53,8 +51,8 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
             console.warn(`[discovery] no results for ${label}`);
           } else {
             for (const a of artists) {
-              if (!candidateIds.has(a.id)) {
-                candidateIds.set(a.id, cat.category);
+              if (!seen.has(a.id)) {
+                seen.set(a.id, { artist: a, category: cat.category });
               }
             }
           }
@@ -75,40 +73,21 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
     }
   }
 
-  result.artists_seen = candidateIds.size;
-  console.log(`[discovery] collected ${candidateIds.size} unique candidate IDs`);
+  result.artists_seen = seen.size;
 
-  // Step 2: batch-fetch REAL artist data (followers + popularity are accurate here)
-  const ids = [...candidateIds.keys()];
-  let realArtists = [];
-  try {
-    realArtists = await getArtistsByIds(ids);
-    console.log(`[discovery] fetched real data for ${realArtists.length}/${ids.length} artists`);
-  } catch (err) {
-    if (err.status === 429 && err.retryAfter > 60) {
-      console.error(`[discovery] batch fetch rate-limited for ${err.retryAfter}s — aborting`);
-      return result;
-    }
-    console.error(`[discovery] batch fetch failed: ${err.message}`);
-    result.errors.push(`batch fetch: ${err.message}`);
-    return result;
-  }
-
-  // Step 3: filter by real followers + popularity
   const buckets = { lt_100k: 0, lt_500k: 0, lt_1m: 0, lt_5m: 0, gte_5m: 0 };
-  let nullCount = 0;
+  let skippedNull = 0;
   const sampleSmall = [];
 
-  for (const artist of realArtists) {
-    const category = candidateIds.get(artist.id) ?? 'Unknown';
-
-    // Skip artists where we still can't get data
+  for (const { artist, category } of seen.values()) {
+    // REQUIRE real followers + popularity data from search.
+    // Artists missing either field can't be reliably classified —
+    // Spotify omits these fields for both tiny unknowns AND huge stars.
     if (artist.followers == null || artist.popularity == null) {
-      nullCount += 1;
+      skippedNull += 1;
       continue;
     }
 
-    // Track distribution
     if (artist.followers < 100_000) {
       buckets.lt_100k += 1;
       if (sampleSmall.length < 5) sampleSmall.push(`${artist.name} (${artist.followers.toLocaleString()})`);
@@ -119,16 +98,18 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
     else if (artist.followers < 5_000_000) buckets.lt_5m += 1;
     else buckets.gte_5m += 1;
 
-    // Apply emerging filters
     if (artist.followers > cap) continue;
     if (artist.popularity > MAX_POPULARITY) continue;
 
     result.artists_emerging.push({ ...artist, discovery_source: category });
   }
 
-  console.log(`[discovery] follower distribution:`, buckets, `(null: ${nullCount})`);
+  console.log(
+    `[discovery] done: ${result.playlists_attempted - result.playlists_failed}/${result.playlists_attempted} searches ok, ${result.artists_seen} unique artists (${skippedNull} skipped — null data)`,
+  );
+  console.log(`[discovery] follower distribution:`, buckets);
   if (sampleSmall.length) {
-    console.log(`[discovery] smallest artists sample:`, sampleSmall.join(', '));
+    console.log(`[discovery] sample small artists:`, sampleSmall.join(', '));
   }
   console.log(`[discovery] emerging (followers<${cap.toLocaleString()} & popularity<=${MAX_POPULARITY}): ${result.artists_emerging.length}`);
   return result;
