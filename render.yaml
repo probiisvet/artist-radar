@@ -27,6 +27,12 @@ services:
         value: artist-radar
       - key: MAX_FOLLOWERS
         value: '1000000'
+      # Last.fm — discovery data source. Add the real key in the dashboard.
+      - key: LASTFM_API_KEY
+        sync: false
+      # "Emerging" window on the Last.fm listener scale (NOT Spotify scale).
+      - key: LASTFM_MAX_LISTENERS
+        value: '80000'
       - key: REFRESH_CRON
         value: '0 9 * * *'
       # Email — optional, fill in via dashboard:

@@ -19,13 +19,21 @@ import { getDisabledCategories } from '../db/database.js';
 const PAGES = [4, 5, 6, 7];
 // How many artists to verify with artist.getinfo (each = 1 API call)
 const MAX_LOOKUPS = 120;
-const MIN_LISTENERS = 1_000;
+// "Emerging" window, in Last.fm listeners. Decoupled from MAX_FOLLOWERS on
+// purpose: Last.fm has far fewer users than Spotify, so a genuinely emerging
+// artist sits around 1k–80k listeners. Famous acts (Zendaya, Zac Efron…)
+// have 700k+ Last.fm listeners and must be excluded.
+// Override with LASTFM_MAX_LISTENERS / LASTFM_MIN_LISTENERS env vars.
+const MIN_LISTENERS = Number(process.env.LASTFM_MIN_LISTENERS ?? 1_000);
+const MAX_LISTENERS = Number(process.env.LASTFM_MAX_LISTENERS ?? 80_000);
 
 const REQUEST_DELAY_MS = 250;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function discoverFromPlaylists({ maxFollowers } = {}) {
-  const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 500_000);
+export async function discoverFromPlaylists({ maxListeners } = {}) {
+  // Use the dedicated emerging cap, NOT MAX_FOLLOWERS (which is a Spotify-scale
+  // number and lets famous artists slip through on the Last.fm scale).
+  const cap = Number(maxListeners ?? MAX_LISTENERS);
   const disabled = new Set(await getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
 

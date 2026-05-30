@@ -4,15 +4,8 @@ function formatGrowth(pct) {
   return `${sign}${pct.toFixed(1)}%`;
 }
 
-function formatPopChange(delta) {
-  if (delta == null) return null;
-  const sign = delta >= 0 ? '+' : '';
-  return `${sign}${delta}`;
-}
-
 export default function ArtistCard({ artist, onDismiss, onRemove, onRefresh, refreshing }) {
   const growth = formatGrowth(artist.followers_growth_pct);
-  const popDelta = formatPopChange(artist.popularity_change);
   const isPositiveGrowth =
     artist.followers_growth_pct != null && artist.followers_growth_pct > 0;
 
@@ -54,10 +47,7 @@ export default function ArtistCard({ artist, onDismiss, onRemove, onRefresh, ref
 
         <div className="stats">
           <span>
-            <strong>{(artist.followers ?? 0).toLocaleString()}</strong> followers
-          </span>
-          <span>
-            popularity <strong>{artist.popularity ?? 0}</strong>
+            <strong>{(artist.followers ?? 0).toLocaleString()}</strong> listeners
           </span>
           {growth ? (
             <span className={isPositiveGrowth ? 'pos' : 'neg'}>
@@ -65,11 +55,6 @@ export default function ArtistCard({ artist, onDismiss, onRemove, onRefresh, ref
             </span>
           ) : (
             <span className="muted">no growth data yet</span>
-          )}
-          {popDelta && popDelta !== '+0' && (
-            <span className={artist.popularity_change > 0 ? 'pos' : 'neg'}>
-              pop {popDelta}
-            </span>
           )}
         </div>
       </div>

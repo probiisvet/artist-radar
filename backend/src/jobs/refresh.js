@@ -43,6 +43,22 @@ export async function refreshOneArtist(artistId) {
   const stored = await getArtist(artistId);
   if (!stored) throw new Error(`Artist ${artistId} not found`);
 
+  // Auto-discovered artists carry Last.fm listener counts as their "followers".
+  // Spotify (Development Mode) returns null followers/popularity, so refreshing
+  // them through Spotify would WIPE their stats and throw in ensureStats().
+  // Keep the stored Last.fm data intact and just bump the refresh timestamp.
+  if (stored.source === 'discovered') {
+    await upsertArtist({ ...stored, last_refreshed_at: new Date().toISOString() });
+    if (stored.followers != null) {
+      await recordSnapshot({
+        artist_id: stored.id,
+        followers: stored.followers,
+        popularity: stored.popularity,
+      });
+    }
+    return await getArtist(stored.id);
+  }
+
   const fresh = await fetchFreshArtistData(stored);
 
   const now = new Date().toISOString();
@@ -131,7 +147,10 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
       for (const t of tours) await upsertTourDate(t);
       summary.tours_added += tours.length;
     } catch (err) {
-      summary.errors.push(`tours for ${a.name}: ${err.message}`);
+      // A missing artist on Bandsintown (no tours / not listed) is normal and
+      // expected for emerging acts — log it but do NOT surface it as an error,
+      // otherwise every undiscovered artist inflates the error banner.
+      console.warn(`[refresh] no tour data for "${a.name}": ${err.message}`);
     }
   }
 
