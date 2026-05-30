@@ -101,29 +101,60 @@ export async function discoverFromPlaylists({ maxListeners } = {}) {
 
   console.log(`[discovery] ${qualified.length} artists in ${MIN_LISTENERS.toLocaleString()}–${cap.toLocaleString()} listener range`);
 
-  // Step 3: cross-reference with Spotify to get Spotify IDs
+  // Step 3: build emerging records. Spotify is OPTIONAL enrichment (image +
+  // link). We never REQUIRE a Spotify match — that used to drop artists and,
+  // worse, 80+ searches per run got the app rate-limited for hours. Once we
+  // hit a 429 we stop calling Spotify entirely and fall back to Last.fm data
+  // for the rest, so discovery always returns every qualified artist.
+  let spotifyBlocked = false;
   for (const { name, listeners, category } of qualified) {
-    try {
-      const results = await searchArtists(name, { limit: 1 });
-      const match = results[0];
-      if (!match) { await sleep(REQUEST_DELAY_MS); continue; }
+    const base = lastfmArtistRecord(name, listeners, category);
+    let record = base;
 
-      if (match.name.toLowerCase() !== name.toLowerCase()) {
+    if (!spotifyBlocked) {
+      try {
+        const results = await searchArtists(name, { limit: 1 });
+        const match = results[0];
+        if (match && match.name.toLowerCase() === name.toLowerCase()) {
+          // Keep our stable Last.fm id (so dedupe works whether or not Spotify
+          // is reachable) and just borrow Spotify's image + link.
+          record = {
+            ...base,
+            image_url: match.image_url ?? null,
+            spotify_url: match.spotify_url ?? base.spotify_url,
+            genres: match.genres ?? base.genres,
+          };
+        }
         await sleep(REQUEST_DELAY_MS);
-        continue;
+      } catch (err) {
+        if (err.status === 429) {
+          spotifyBlocked = true;
+          console.warn('[discovery] Spotify rate-limited — using Last.fm-only records for the rest');
+        } else {
+          console.warn(`[discovery] Spotify lookup failed for "${name}": ${err.message}`);
+        }
       }
-
-      result.artists_emerging.push({
-        ...match,
-        followers: listeners, // Last.fm listeners as proxy
-        discovery_source: category,
-      });
-    } catch (err) {
-      console.warn(`[discovery] Spotify lookup failed for "${name}": ${err.message}`);
     }
-    await sleep(REQUEST_DELAY_MS);
+
+    result.artists_emerging.push(record);
   }
 
-  console.log(`[discovery] emerging: ${result.artists_emerging.length}`);
+  console.log(`[discovery] emerging: ${result.artists_emerging.length} (spotify enrichment: ${spotifyBlocked ? 'partial — rate-limited' : 'ok'})`);
   return result;
+}
+
+// Build a self-contained emerging-artist record from Last.fm data alone, with
+// a stable id derived from the name so re-runs dedupe correctly without Spotify.
+function lastfmArtistRecord(name, listeners, category) {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return {
+    id: `lastfm:${slug}`,
+    name,
+    image_url: null,
+    spotify_url: `https://www.last.fm/music/${encodeURIComponent(name)}`,
+    genres: JSON.stringify([]),
+    followers: listeners, // Last.fm listeners as our follower proxy
+    popularity: null,
+    discovery_source: category,
+  };
 }
