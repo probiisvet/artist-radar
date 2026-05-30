@@ -8,7 +8,7 @@ import {
   getArtist,
 } from '../db/database.js';
 import { searchTopArtist, getArtistById } from '../services/spotify.js';
-import { fetchUsTourDates } from '../services/bandsintown.js';
+import { fetchUsTourDates } from '../services/ticketmaster.js';
 import { discoverFromPlaylists } from '../services/discovery.js';
 import { getArtistInfo } from '../services/lastfm.js';
 import { sendTourAlertEmail } from '../services/email.js';
@@ -166,11 +166,14 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
       for (const t of tours) await upsertTourDate(t);
       summary.tours_added += tours.length;
     } catch (err) {
-      // A missing artist on Bandsintown (no tours / not listed) is normal and
-      // expected for emerging acts — log it but do NOT surface it as an error,
-      // otherwise every undiscovered artist inflates the error banner.
+      // A missing artist (no shows / not listed) is normal and expected for
+      // emerging acts — log it but do NOT surface it as an error, otherwise
+      // every artist without tours inflates the error banner.
       console.warn(`[refresh] no tour data for "${a.name}": ${err.message}`);
     }
+    // Ticketmaster allows ~5 req/s; we make up to 2 calls per artist, so a
+    // short pause keeps us comfortably under the limit.
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   // ---- Phase 4: email any unnotified tour dates ------------------------

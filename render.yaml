@@ -23,8 +23,10 @@ services:
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      - key: BANDSINTOWN_APP_ID
-        value: artist-radar
+      # Ticketmaster Discovery API — free US tour-date lookup (any artist).
+      # Get a key at https://developer.ticketmaster.com → add it in the dashboard.
+      - key: TICKETMASTER_API_KEY
+        sync: false
       - key: MAX_FOLLOWERS
         value: '1000000'
       # Last.fm — discovery data source. Add the real key in the dashboard.
