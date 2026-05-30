@@ -49,6 +49,23 @@ CREATE TABLE IF NOT EXISTS tour_dates (
 CREATE INDEX IF NOT EXISTS idx_tours_artist_date ON tour_dates(artist_id, event_date);
 CREATE INDEX IF NOT EXISTS idx_tours_notified ON tour_dates(notified);
 
+-- Tour "news leads" found via web search (Brave Search API). Unlike tour_dates
+-- these are not exact dates/venues — they are links to pages that mention the
+-- artist touring, used to alert the user to investigate.
+CREATE TABLE IF NOT EXISTS tour_leads (
+  id           TEXT PRIMARY KEY,            -- news:<artist_id>:<url-hash>
+  artist_id    TEXT NOT NULL,
+  title        TEXT,
+  url          TEXT NOT NULL,
+  source_site  TEXT,                        -- e.g. ticketmaster.com
+  found_at     TEXT NOT NULL,
+  notified     INTEGER NOT NULL DEFAULT 0,  -- 1 once an alert email has been sent
+  FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_leads_notified ON tour_leads(notified);
+CREATE INDEX IF NOT EXISTS idx_leads_artist ON tour_leads(artist_id);
+
 -- Playlist categories the user has explicitly turned off in the UI.
 -- The full list of categories comes from config/discoveryPlaylists.js;
 -- absence of a row here means the category is enabled (default).

@@ -1,14 +1,13 @@
 import { Router } from 'express';
-import { listUpcomingTours } from '../db/database.js';
+import { listTourLeads } from '../db/database.js';
 
 const router = Router();
 
-// GET /api/tours — upcoming US tours for tracked (non-dismissed) artists
-// GET /api/tours?artist_id=... — restrict to one artist
+// GET /api/tours — tour-news leads (web-search hits) for tracked artists.
+// Returned under the `tours` key so the frontend contract stays the same.
 router.get('/', async (req, res, next) => {
   try {
-    const artist_id = req.query.artist_id ? String(req.query.artist_id) : undefined;
-    const tours = await listUpcomingTours({ artist_id });
+    const tours = await listTourLeads();
     res.json({ tours });
   } catch (err) {
     next(err);

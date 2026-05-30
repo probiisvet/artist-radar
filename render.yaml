@@ -23,9 +23,9 @@ services:
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # Ticketmaster Discovery API — free US tour-date lookup (any artist).
-      # Get a key at https://developer.ticketmaster.com → add it in the dashboard.
-      - key: TICKETMASTER_API_KEY
+      # Brave Search API — web-searches each artist for tour/ticket links.
+      # Free tier, single key: https://brave.com/search/api → add in dashboard.
+      - key: BRAVE_SEARCH_API_KEY
         sync: false
       - key: MAX_FOLLOWERS
         value: '1000000'

@@ -2,17 +2,18 @@ import {
   listArtists,
   upsertArtist,
   recordSnapshot,
-  upsertTourDate,
-  listUnnotifiedTours,
-  markToursNotified,
   getArtist,
+  getPriorDaySnapshot,
+  deleteArtist,
+  insertTourLead,
+  listUnnotifiedLeads,
+  markLeadsNotified,
 } from '../db/database.js';
 import { searchTopArtist, getArtistById } from '../services/spotify.js';
-import { fetchUsTourDates } from '../services/ticketmaster.js';
+import { searchTourNews } from '../services/tourNews.js';
 import { discoverFromPlaylists } from '../services/discovery.js';
 import { getArtistInfo } from '../services/lastfm.js';
-import { sendTourAlertEmail } from '../services/email.js';
-import { getPriorDaySnapshot, deleteArtist } from '../db/database.js';
+import { sendTourLeadEmail } from '../services/email.js';
 
 // Resolve fresh artist data using Spotify Search (per user request).
 // Falls back to /v1/artists/{id} if the search result's ID doesn't match
@@ -159,30 +160,36 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
     }
   }
 
-  // ---- Phase 3: tour dates for every (now-current) tracked artist ------
+  // ---- Phase 3: web-search each artist for tour news -------------------
+  // Brave Search surfaces links from ticketing sites (Ticketmaster, Songkick…)
+  // when an artist starts touring. We store only brand-new links.
+  let braveBlocked = false;
   for (const a of await listArtists({ includeDismissed: false })) {
+    if (braveBlocked) break;
     try {
-      const tours = await fetchUsTourDates(a);
-      for (const t of tours) await upsertTourDate(t);
-      summary.tours_added += tours.length;
+      const leads = await searchTourNews(a);
+      for (const lead of leads) {
+        if (await insertTourLead(lead)) summary.tours_added += 1;
+      }
     } catch (err) {
-      // A missing artist (no shows / not listed) is normal and expected for
-      // emerging acts — log it but do NOT surface it as an error, otherwise
-      // every artist without tours inflates the error banner.
-      console.warn(`[refresh] no tour data for "${a.name}": ${err.message}`);
+      if (/429|rate limit/i.test(err.message)) {
+        braveBlocked = true;
+        console.warn('[refresh] Brave Search rate-limited — stopping tour-news scan for this run');
+      } else {
+        console.warn(`[refresh] tour-news search failed for "${a.name}": ${err.message}`);
+      }
     }
-    // Ticketmaster allows ~5 req/s; we make up to 2 calls per artist, so a
-    // short pause keeps us comfortably under the limit.
-    await new Promise((r) => setTimeout(r, 250));
+    // Brave free tier allows ~1 req/s — pace ourselves.
+    await new Promise((r) => setTimeout(r, 1100));
   }
 
-  // ---- Phase 4: email any unnotified tour dates ------------------------
+  // ---- Phase 4: email any unnotified tour-news leads -------------------
   try {
-    const unnotified = await listUnnotifiedTours();
+    const unnotified = await listUnnotifiedLeads();
     if (unnotified.length) {
-      const sentIds = await sendTourAlertEmail(unnotified);
+      const sentIds = await sendTourLeadEmail(unnotified);
       if (sentIds.length) {
-        await markToursNotified(sentIds);
+        await markLeadsNotified(sentIds);
         summary.emails_sent = 1;
       }
     }

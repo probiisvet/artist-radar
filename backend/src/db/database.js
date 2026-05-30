@@ -213,6 +213,51 @@ export async function markToursNotified(tourIds) {
   });
 }
 
+// ---------- Tour news leads ----------
+
+// Insert a lead if we haven't seen this exact URL for this artist before.
+// Returns true if it was newly inserted (so the caller can count/notify).
+export async function insertTourLead(lead) {
+  const result = await client.execute({
+    sql: `INSERT INTO tour_leads (id, artist_id, title, url, source_site, found_at, notified)
+          VALUES (?, ?, ?, ?, ?, ?, 0)
+          ON CONFLICT(id) DO NOTHING`,
+    args: [lead.id, lead.artist_id, lead.title ?? null, lead.url, lead.source_site ?? null, new Date().toISOString()],
+  });
+  return result.rowsAffected > 0;
+}
+
+export async function listTourLeads() {
+  const result = await client.execute(`
+    SELECT l.*, a.name AS artist_name, a.image_url AS artist_image
+    FROM tour_leads l
+    JOIN artists a ON a.id = l.artist_id
+    WHERE a.dismissed = 0
+    ORDER BY l.found_at DESC
+  `);
+  return result.rows;
+}
+
+export async function listUnnotifiedLeads() {
+  const result = await client.execute(`
+    SELECT l.*, a.name AS artist_name
+    FROM tour_leads l
+    JOIN artists a ON a.id = l.artist_id
+    WHERE l.notified = 0 AND a.dismissed = 0
+    ORDER BY l.artist_id, l.found_at
+  `);
+  return result.rows;
+}
+
+export async function markLeadsNotified(leadIds) {
+  if (!leadIds.length) return;
+  const placeholders = leadIds.map(() => '?').join(',');
+  await client.execute({
+    sql: `UPDATE tour_leads SET notified = 1 WHERE id IN (${placeholders})`,
+    args: leadIds,
+  });
+}
+
 // ---------- Disabled categories ----------
 
 export async function getDisabledCategories() {

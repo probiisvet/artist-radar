@@ -1,12 +1,9 @@
-function formatDate(iso) {
+function formatFound(iso) {
   try {
-    return new Date(iso).toLocaleString('en-US', {
-      weekday: 'short',
+    return new Date(iso).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
     });
   } catch {
     return iso;
@@ -17,23 +14,24 @@ export default function TourList({ tours }) {
   if (!tours.length) {
     return (
       <p className="muted">
-        No upcoming US tour dates for tracked artists. Background refresh
-        runs daily — or click "Run refresh now" above to check immediately.
+        No tour news yet for tracked artists. The daily refresh web-searches
+        each artist for tour/ticket links — or click "Run refresh now" above to
+        check immediately.
       </p>
     );
   }
 
-  // Group by artist for nicer display
+  // Group leads by artist
   const grouped = new Map();
   for (const t of tours) {
     if (!grouped.has(t.artist_id)) {
       grouped.set(t.artist_id, {
         name: t.artist_name,
         image: t.artist_image,
-        dates: [],
+        leads: [],
       });
     }
-    grouped.get(t.artist_id).dates.push(t);
+    grouped.get(t.artist_id).leads.push(t);
   }
 
   return (
@@ -47,26 +45,21 @@ export default function TourList({ tours }) {
               <div className="avatar small img-placeholder" />
             )}
             <h2>{group.name}</h2>
-            <span className="count">{group.dates.length} show{group.dates.length === 1 ? '' : 's'}</span>
+            <span className="count">
+              {group.leads.length} link{group.leads.length === 1 ? '' : 's'}
+            </span>
           </header>
           <ul>
-            {group.dates.map((d) => (
+            {group.leads.map((d) => (
               <li key={d.id}>
-                <div className="when">{formatDate(d.event_date)}</div>
                 <div className="where">
-                  <strong>{[d.city, d.region].filter(Boolean).join(', ')}</strong>
-                  {d.venue_name ? ` — ${d.venue_name}` : ''}
-                </div>
-                {d.ticket_url && (
-                  <a
-                    href={d.ticket_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn small"
-                  >
-                    Tickets
+                  <a href={d.url} target="_blank" rel="noreferrer">
+                    <strong>{d.title || d.url}</strong>
                   </a>
-                )}
+                </div>
+                <div className="when muted">
+                  {d.source_site} · found {formatFound(d.found_at)}
+                </div>
               </li>
             ))}
           </ul>
