@@ -172,15 +172,15 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
         if (await insertTourLead(lead)) summary.tours_added += 1;
       }
     } catch (err) {
-      if (/429|rate limit/i.test(err.message)) {
+      if (/429|quota|rate limit/i.test(err.message)) {
         braveBlocked = true;
-        console.warn('[refresh] Brave Search rate-limited — stopping tour-news scan for this run');
+        console.warn('[refresh] Search quota hit — stopping tour-news scan for this run');
       } else {
         console.warn(`[refresh] tour-news search failed for "${a.name}": ${err.message}`);
       }
     }
-    // Brave free tier allows ~1 req/s — pace ourselves.
-    await new Promise((r) => setTimeout(r, 1100));
+    // Gentle pacing between searches.
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   // ---- Phase 4: email any unnotified tour-news leads -------------------

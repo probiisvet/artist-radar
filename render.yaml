@@ -23,9 +23,13 @@ services:
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # Brave Search API — web-searches each artist for tour/ticket links.
-      # Free tier, single key: https://brave.com/search/api → add in dashboard.
-      - key: BRAVE_SEARCH_API_KEY
+      # Google Programmable Search — web-searches each artist for tour/ticket
+      # links. Truly free (100 queries/day, no credit card). Two values:
+      #   GOOGLE_API_KEY  — console.cloud.google.com (enable "Custom Search API")
+      #   GOOGLE_CSE_ID   — programmablesearchengine.google.com (search engine id)
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_CSE_ID
         sync: false
       - key: MAX_FOLLOWERS
         value: '1000000'
