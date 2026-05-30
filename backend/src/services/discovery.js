@@ -17,10 +17,11 @@ import { getTagArtists } from './lastfm.js';
 import { DISCOVERY_CATEGORIES } from '../config/discoveryCategories.js';
 import { getDisabledCategories } from '../db/database.js';
 
-// Skip page 1 (superstars). Pages 2-4 = emerging territory.
-const PAGES = [2, 3, 4];
+// Pages to fetch per genre. Page 1 included — the listener filter
+// handles excluding superstars. For niche genres page 1 already has emerging acts.
+const PAGES = [1, 2, 3];
 // Minimum listeners — filters out dead/empty profiles
-const MIN_LISTENERS = 5_000;
+const MIN_LISTENERS = 1_000;
 
 const REQUEST_DELAY_MS = 300;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -49,6 +50,10 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
         const label = `${cat.category} / ${genre} p${page}`;
         try {
           const artists = await getTagArtists(genre, { page, limit: 50 });
+          if (artists.length > 0 && page === 1) {
+            const sample = artists.slice(0, 3).map(a => `${a.name}(${a.listeners.toLocaleString()})`).join(', ');
+            console.log(`[discovery] ${label} sample: ${sample}`);
+          }
           for (const a of artists) {
             if (a.listeners >= MIN_LISTENERS && a.listeners <= cap) {
               const key = a.name.toLowerCase();
