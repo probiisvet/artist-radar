@@ -15,10 +15,12 @@ import { getTagArtists, getArtistInfo } from './lastfm.js';
 import { DISCOVERY_CATEGORIES } from '../config/discoveryCategories.js';
 import { getDisabledCategories } from '../db/database.js';
 
-// Higher pages = smaller/less known artists per genre
-const PAGES = [4, 5, 6, 7];
+// Higher pages = smaller/less known artists per genre. Pages 4-7 still return
+// the top ~350 artists of a genre (way above the emerging range), so we reach
+// deeper where the genuinely small artists live.
+const PAGES = [12, 16, 20, 24];
 // How many artists to verify with artist.getinfo (each = 1 API call)
-const MAX_LOOKUPS = 120;
+const MAX_LOOKUPS = 150;
 // "Emerging" window, in Last.fm listeners. Decoupled from MAX_FOLLOWERS on
 // purpose: Last.fm has far fewer users than Spotify, so a genuinely emerging
 // artist sits around 1k–80k listeners. Famous acts (Zendaya, Zac Efron…)
@@ -72,7 +74,14 @@ export async function discoverFromPlaylists({ maxListeners } = {}) {
   }
 
   result.artists_seen = candidates.size;
-  const toCheck = [...candidates.values()].slice(0, MAX_LOOKUPS);
+  // Shuffle so the MAX_LOOKUPS sample spans ALL genres and page depths, instead
+  // of just the first genre's top results (which are never emerging).
+  const pool = [...candidates.values()];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const toCheck = pool.slice(0, MAX_LOOKUPS);
   console.log(`[discovery] ${candidates.size} unique candidates — checking ${toCheck.length} via artist.getinfo`);
 
   // Step 2: get real listener counts from Last.fm
