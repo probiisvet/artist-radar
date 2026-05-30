@@ -1,32 +1,32 @@
-// Emerging-artist discovery via Spotify artist search with offset pagination.
+// Emerging-artist discovery using Last.fm for listener data + Spotify for IDs.
 //
-// Spotify API constraints for new apps (post-Nov-2024):
-//   - genre search results return null followers/popularity — useless for filtering
-//   - /v1/artists?ids= batch endpoint returns 403 — blocked for new apps
-//   - /v1/artists/{id} individual endpoint WORKS
-//   - /recommendations, /browse/new-releases, editorial playlists — all blocked
+// Why Last.fm instead of Spotify for filtering?
+//   Spotify's API (Development Mode) does not return followers/popularity —
+//   making it impossible to distinguish Nirvana from a nobody. Last.fm
+//   reliably returns listener counts for every artist.
 //
-// Strategy:
-//   1. Search genre:"X" at multiple offsets to collect candidate IDs
-//   2. Individually fetch /v1/artists/{id} for up to MAX_FETCHES candidates
-//      — this is the only way to get real followers + popularity
-//   3. Filter by followers < cap AND popularity <= MAX_POPULARITY
+// Flow:
+//   1. For each genre, fetch top artists from Last.fm at pages 2-4
+//      (page 1 = household names; deeper pages = emerging acts)
+//   2. Filter: listeners between MIN_LISTENERS and cap (default 500k)
+//   3. Cross-reference with Spotify to get Spotify IDs for tracking
+//   4. Save with Last.fm listener count stored as `followers`
 
-import { searchArtists, getArtistById } from './spotify.js';
+import { searchArtists } from './spotify.js';
+import { getTagArtists } from './lastfm.js';
 import { DISCOVERY_CATEGORIES } from '../config/discoveryCategories.js';
 import { getDisabledCategories } from '../db/database.js';
 
-const PAGE_OFFSETS = [10, 20];
-const REQUEST_DELAY_MS = 300;
-// Max individual /v1/artists/{id} calls per discovery run.
-// Each call costs 1 API request; 50 calls × 300ms = ~15s overhead.
-const MAX_FETCHES = 50;
+// Skip page 1 (superstars). Pages 2-4 = emerging territory.
+const PAGES = [2, 3, 4];
+// Minimum listeners — filters out dead/empty profiles
+const MIN_LISTENERS = 5_000;
 
+const REQUEST_DELAY_MS = 300;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function discoverFromPlaylists({ maxFollowers } = {}) {
-  const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 1_000_000);
-  const MAX_POPULARITY = Number(process.env.MAX_POPULARITY ?? 65);
+  const cap = Number(maxFollowers ?? process.env.MAX_FOLLOWERS ?? 500_000);
   const disabled = new Set(await getDisabledCategories());
   const enabled = DISCOVERY_CATEGORIES.filter((c) => !disabled.has(c.category));
 
@@ -38,85 +38,65 @@ export async function discoverFromPlaylists({ maxFollowers } = {}) {
     errors: [],
   };
 
-  // Step 1: collect unique candidate IDs from genre searches
-  const candidateIds = new Map(); // id -> category
+  // Step 1: collect emerging candidates from Last.fm
+  const candidates = new Map(); // name.toLowerCase() -> { name, listeners, category }
 
   for (const cat of enabled) {
     for (const genre of cat.genres) {
       if (!genre) continue;
-      for (const offset of PAGE_OFFSETS) {
+      for (const page of PAGES) {
         result.playlists_attempted += 1;
-        const label = `${cat.category} / ${genre} @offset=${offset}`;
+        const label = `${cat.category} / ${genre} p${page}`;
         try {
-          const artists = await searchArtists(`genre:"${genre}"`, { limit: 10, offset });
+          const artists = await getTagArtists(genre, { page, limit: 50 });
           for (const a of artists) {
-            if (!candidateIds.has(a.id)) {
-              candidateIds.set(a.id, cat.category);
+            if (a.listeners >= MIN_LISTENERS && a.listeners <= cap) {
+              const key = a.name.toLowerCase();
+              if (!candidates.has(key)) {
+                candidates.set(key, { name: a.name, listeners: a.listeners, category: cat.category });
+              }
             }
           }
         } catch (err) {
           result.playlists_failed += 1;
-          const msg = `${label}: ${err.message}`;
-          result.errors.push(msg);
-          console.warn(`[discovery] skipping ${msg}`);
-          if (err.status === 429 && err.retryAfter > 60) {
-            console.error(`[discovery] aborting: rate-limited for ${err.retryAfter}s.`);
-            return result;
-          }
+          result.errors.push(`${label}: ${err.message}`);
+          console.warn(`[discovery] skipping ${label}: ${err.message}`);
         }
         await sleep(REQUEST_DELAY_MS);
       }
     }
   }
 
-  result.artists_seen = candidateIds.size;
-  console.log(`[discovery] collected ${candidateIds.size} candidate IDs — fetching up to ${MAX_FETCHES} individually`);
+  result.artists_seen = candidates.size;
+  console.log(
+    `[discovery] Last.fm: ${candidates.size} candidates with ${MIN_LISTENERS.toLocaleString()}–${cap.toLocaleString()} listeners`,
+  );
 
-  // Step 2: individually fetch real data (only way to get accurate followers/popularity)
-  const ids = [...candidateIds.keys()].slice(0, MAX_FETCHES);
-  const buckets = { lt_100k: 0, lt_500k: 0, lt_1m: 0, lt_5m: 0, gte_5m: 0 };
-  let nullCount = 0;
-  const sampleSmall = [];
-
-  for (const id of ids) {
-    const category = candidateIds.get(id);
+  // Step 2: cross-reference with Spotify to get Spotify IDs
+  for (const { name, listeners, category } of candidates.values()) {
     try {
-      const artist = await getArtistById(id);
+      const results = await searchArtists(name, { limit: 1 });
+      const match = results[0];
+      if (!match) { await sleep(REQUEST_DELAY_MS); continue; }
 
-      if (artist.followers == null || artist.popularity == null) {
-        nullCount += 1;
+      // Require exact name match (case-insensitive) to avoid false matches
+      if (match.name.toLowerCase() !== name.toLowerCase()) {
         await sleep(REQUEST_DELAY_MS);
         continue;
       }
 
-      // Track distribution
-      if (artist.followers < 100_000) {
-        buckets.lt_100k += 1;
-        if (sampleSmall.length < 5) sampleSmall.push(`${artist.name} (${artist.followers.toLocaleString()})`);
-      } else if (artist.followers < 500_000) {
-        buckets.lt_500k += 1;
-        if (sampleSmall.length < 5) sampleSmall.push(`${artist.name} (${artist.followers.toLocaleString()})`);
-      } else if (artist.followers < 1_000_000) buckets.lt_1m += 1;
-      else if (artist.followers < 5_000_000) buckets.lt_5m += 1;
-      else buckets.gte_5m += 1;
-
-      // Filter
-      if (artist.followers > cap) { await sleep(REQUEST_DELAY_MS); continue; }
-      if (artist.popularity > MAX_POPULARITY) { await sleep(REQUEST_DELAY_MS); continue; }
-
-      result.artists_emerging.push({ ...artist, discovery_source: category });
+      result.artists_emerging.push({
+        ...match,
+        followers: listeners, // Last.fm listeners as proxy for Spotify followers
+        discovery_source: category,
+      });
     } catch (err) {
-      if (err.status === 429 && err.retryAfter > 60) {
-        console.error(`[discovery] rate-limited during individual fetch — aborting`);
-        return result;
-      }
-      console.warn(`[discovery] fetch failed for ${id}: ${err.message}`);
+      console.warn(`[discovery] Spotify lookup failed for "${name}": ${err.message}`);
+      result.errors.push(`spotify lookup "${name}": ${err.message}`);
     }
     await sleep(REQUEST_DELAY_MS);
   }
 
-  console.log(`[discovery] follower distribution:`, buckets, `(null: ${nullCount})`);
-  if (sampleSmall.length) console.log(`[discovery] sample:`, sampleSmall.join(', '));
   console.log(`[discovery] emerging: ${result.artists_emerging.length}`);
   return result;
 }
