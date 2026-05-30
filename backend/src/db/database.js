@@ -99,12 +99,30 @@ export async function setDismissed(id, dismissed) {
 // ---------- Snapshots ----------
 
 export async function recordSnapshot({ artist_id, followers, popularity }) {
-  if (followers == null || popularity == null) return;
+  // We only need followers (Last.fm listeners) to track growth. Popularity is
+  // always null for Last.fm-discovered artists, so requiring it would skip
+  // every snapshot and make growth tracking impossible.
+  if (followers == null) return;
   await client.execute({
     sql: `INSERT INTO artist_snapshots (artist_id, followers, popularity, recorded_at)
           VALUES (?, ?, ?, ?)`,
-    args: [artist_id, followers, popularity, new Date().toISOString()],
+    args: [artist_id, followers, popularity ?? null, new Date().toISOString()],
   });
+}
+
+// Most recent snapshot recorded on an EARLIER calendar day than today. Used to
+// judge day-over-day growth without being fooled by multiple same-day refreshes
+// (which would otherwise compare a value against itself).
+export async function getPriorDaySnapshot(artist_id) {
+  const result = await client.execute({
+    sql: `SELECT followers, recorded_at
+          FROM artist_snapshots
+          WHERE artist_id = ? AND substr(recorded_at, 1, 10) < substr(?, 1, 10)
+          ORDER BY recorded_at DESC
+          LIMIT 1`,
+    args: [artist_id, new Date().toISOString()],
+  });
+  return result.rows[0] ?? null;
 }
 
 export async function getBaselineSnapshot(artist_id, days = 30) {

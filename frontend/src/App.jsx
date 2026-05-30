@@ -118,6 +118,7 @@ export default function App() {
           {refreshSummary.discovery
             ? ` discovery: +${refreshSummary.discovery.artists_added} new (from ${refreshSummary.discovery.playlists_attempted - refreshSummary.discovery.playlists_failed}/${refreshSummary.discovery.playlists_attempted} playlists) ·`
             : ''}
+          {refreshSummary.pruned ? ` removed ${refreshSummary.pruned} not-growing ·` : ''}
           {' '}+{refreshSummary.tours_added} tour rows ·
           emails sent: {refreshSummary.emails_sent}
           {refreshSummary.errors?.length ? (

@@ -10,7 +10,9 @@ import {
 import { searchTopArtist, getArtistById } from '../services/spotify.js';
 import { fetchUsTourDates } from '../services/bandsintown.js';
 import { discoverFromPlaylists } from '../services/discovery.js';
+import { getArtistInfo } from '../services/lastfm.js';
 import { sendTourAlertEmail } from '../services/email.js';
+import { getPriorDaySnapshot, deleteArtist } from '../db/database.js';
 
 // Resolve fresh artist data using Spotify Search (per user request).
 // Falls back to /v1/artists/{id} if the search result's ID doesn't match
@@ -44,18 +46,18 @@ export async function refreshOneArtist(artistId) {
   if (!stored) throw new Error(`Artist ${artistId} not found`);
 
   // Auto-discovered artists carry Last.fm listener counts as their "followers".
-  // Spotify (Development Mode) returns null followers/popularity, so refreshing
-  // them through Spotify would WIPE their stats and throw in ensureStats().
-  // Keep the stored Last.fm data intact and just bump the refresh timestamp.
+  // Spotify (Development Mode) returns null, so we re-fetch the LIVE Last.fm
+  // listener count instead — that's what lets us see growth day over day.
   if (stored.source === 'discovered') {
-    await upsertArtist({ ...stored, last_refreshed_at: new Date().toISOString() });
-    if (stored.followers != null) {
-      await recordSnapshot({
-        artist_id: stored.id,
-        followers: stored.followers,
-        popularity: stored.popularity,
-      });
+    let followers = stored.followers;
+    try {
+      const info = await getArtistInfo(stored.name);
+      if (info.listeners > 0) followers = info.listeners;
+    } catch (err) {
+      console.warn(`[refresh] Last.fm getinfo failed for "${stored.name}": ${err.message} — keeping previous count`);
     }
+    await upsertArtist({ ...stored, followers, last_refreshed_at: new Date().toISOString() });
+    await recordSnapshot({ artist_id: stored.id, followers, popularity: null });
     return await getArtist(stored.id);
   }
 
@@ -86,6 +88,7 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
   const summary = {
     artists_refreshed: 0,
     snapshots_recorded: 0,
+    pruned: 0,
     discovery: null,
     tours_added: 0,
     emails_sent: 0,
@@ -103,6 +106,22 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
       const msg = `refresh "${a.name}" (${a.id}): ${err.message}`;
       summary.errors.push(msg);
       console.error('[refresh]', msg);
+    }
+  }
+
+  // ---- Phase 1.5: prune auto-discovered artists that aren't growing -----
+  // Keep only artists whose Last.fm listeners went UP versus a previous day.
+  // Those that dropped or stayed flat are removed automatically. We never
+  // touch manually-tracked artists — the user added those on purpose.
+  for (const a of await listArtists({ includeDismissed: false })) {
+    if (a.source !== 'discovered') continue;
+    if (a.followers == null) continue;
+    const prior = await getPriorDaySnapshot(a.id);
+    if (!prior) continue; // discovered today — give it at least one day
+    if (a.followers <= prior.followers) {
+      await deleteArtist(a.id);
+      summary.pruned += 1;
+      console.log(`[refresh] pruned "${a.name}" — ${prior.followers} → ${a.followers} listeners (not growing)`);
     }
   }
 
