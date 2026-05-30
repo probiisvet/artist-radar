@@ -106,7 +106,9 @@ export async function recordSnapshot({ artist_id, followers, popularity }) {
   await client.execute({
     sql: `INSERT INTO artist_snapshots (artist_id, followers, popularity, recorded_at)
           VALUES (?, ?, ?, ?)`,
-    args: [artist_id, followers, popularity ?? null, new Date().toISOString()],
+    // The snapshots table has popularity NOT NULL, but Last.fm artists have no
+    // popularity. We only use followers for growth, so store 0 as a filler.
+    args: [artist_id, followers, popularity ?? 0, new Date().toISOString()],
   });
 }
 
