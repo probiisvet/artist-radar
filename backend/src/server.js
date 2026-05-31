@@ -33,9 +33,14 @@ app.use('/api/diagnostic', diagnosticRouter);
 // full summary so the UI can show "refreshed N artists, +X tours…".
 app.post('/api/refresh', async (req, res, next) => {
   try {
-    const summary = await runRefresh({
-      skipDiscovery: req.body?.skipDiscovery === true,
-    });
+    // If the body specifies phases, run only those (separate dashboard buttons:
+    // refresh artists / discover new / refresh tours). Otherwise run everything.
+    const phases = req.body?.phases;
+    const summary = await runRefresh(
+      phases
+        ? { phases }
+        : { skipDiscovery: req.body?.skipDiscovery === true },
+    );
     res.json(summary);
   } catch (err) {
     next(err);

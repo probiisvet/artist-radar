@@ -40,12 +40,13 @@ export default function App() {
     loadAll();
   }, [loadAll]);
 
-  const onRefresh = async () => {
+  // `phases` null = full refresh (everything). Otherwise only the named phases.
+  const runRefresh = async (phases) => {
     setRefreshing(true);
     setError(null);
     setRefreshSummary(null);
     try {
-      const summary = await api.refresh();
+      const summary = phases ? await api.refreshPhases(phases) : await api.refresh();
       setRefreshSummary(summary);
       await loadAll();
     } catch (err) {
@@ -54,6 +55,11 @@ export default function App() {
       setRefreshing(false);
     }
   };
+
+  const onRefreshAll = () => runRefresh(null);
+  const onRefreshArtists = () => runRefresh({ artists: true });
+  const onDiscoverNew = () => runRefresh({ discovery: true });
+  const onRefreshTours = () => runRefresh({ tours: true });
 
   const onRefreshArtist = async (id) => {
     setRefreshingIds((s) => new Set(s).add(id));
@@ -107,9 +113,20 @@ export default function App() {
             Catch emerging artists before they blow up — and never miss a US tour announcement.
           </p>
         </div>
-        <button className="btn primary" onClick={onRefresh} disabled={refreshing}>
-          {refreshing ? 'Refreshing…' : 'Run refresh now'}
-        </button>
+        <div className="refresh-actions">
+          <button className="btn primary" onClick={onRefreshAll} disabled={refreshing}>
+            {refreshing ? 'Working…' : 'Run full refresh'}
+          </button>
+          <button className="btn" onClick={onRefreshArtists} disabled={refreshing} title="Update listener counts & growth for tracked artists">
+            Refresh artists
+          </button>
+          <button className="btn" onClick={onDiscoverNew} disabled={refreshing} title="Discover new emerging artists from playlists">
+            Find new
+          </button>
+          <button className="btn" onClick={onRefreshTours} disabled={refreshing} title="Search tour/ticket news for tracked artists">
+            Refresh tours
+          </button>
+        </div>
       </header>
 
       {refreshSummary && (

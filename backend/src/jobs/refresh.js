@@ -100,7 +100,17 @@ export async function refreshOneArtist(artistId) {
 // Single 24h refresh cycle. Each phase is isolated so a failure in
 // discovery or tour-fetch does NOT prevent existing tracked artists
 // from being refreshed.
-export async function runRefresh({ skipDiscovery = false } = {}) {
+// `phases` lets the caller run only part of the cycle (used by the separate
+// dashboard buttons): { artists, discovery, tours }. When omitted, the full
+// cycle runs (daily cron + the main "Run full refresh" button). `skipDiscovery`
+// is kept for backward compatibility and just turns the discovery phase off.
+export async function runRefresh({ skipDiscovery = false, phases } = {}) {
+  const run = phases ?? {
+    artists: true,
+    discovery: !skipDiscovery,
+    tours: true,
+  };
+
   const summary = {
     artists_refreshed: 0,
     snapshots_recorded: 0,
@@ -112,37 +122,39 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
   };
 
   // ---- Phase 1: refresh stats for every tracked artist -----------------
-  const tracked = await listArtists({ includeDismissed: false });
-  for (const a of tracked) {
-    try {
-      await refreshOneArtist(a.id);
-      summary.artists_refreshed += 1;
-      summary.snapshots_recorded += 1;
-    } catch (err) {
-      const msg = `refresh "${a.name}" (${a.id}): ${err.message}`;
-      summary.errors.push(msg);
-      console.error('[refresh]', msg);
+  if (run.artists) {
+    const tracked = await listArtists({ includeDismissed: false });
+    for (const a of tracked) {
+      try {
+        await refreshOneArtist(a.id);
+        summary.artists_refreshed += 1;
+        summary.snapshots_recorded += 1;
+      } catch (err) {
+        const msg = `refresh "${a.name}" (${a.id}): ${err.message}`;
+        summary.errors.push(msg);
+        console.error('[refresh]', msg);
+      }
     }
-  }
 
-  // ---- Phase 1.5: prune auto-discovered artists that aren't growing -----
-  // Keep only artists whose Last.fm listeners went UP versus a previous day.
-  // Those that dropped or stayed flat are removed automatically. We never
-  // touch manually-tracked artists — the user added those on purpose.
-  for (const a of await listArtists({ includeDismissed: false })) {
-    if (a.source !== 'discovered') continue;
-    if (a.followers == null) continue;
-    const prior = await getPriorDaySnapshot(a.id);
-    if (!prior) continue; // discovered today — give it at least one day
-    if (a.followers <= prior.followers) {
-      await deleteArtist(a.id);
-      summary.pruned += 1;
-      console.log(`[refresh] pruned "${a.name}" — ${prior.followers} → ${a.followers} listeners (not growing)`);
+    // ---- Phase 1.5: prune auto-discovered artists that aren't growing ---
+    // Keep only artists whose Last.fm listeners went UP versus a previous day.
+    // Those that dropped or stayed flat are removed automatically. We never
+    // touch manually-tracked artists — the user added those on purpose.
+    for (const a of await listArtists({ includeDismissed: false })) {
+      if (a.source !== 'discovered') continue;
+      if (a.followers == null) continue;
+      const prior = await getPriorDaySnapshot(a.id);
+      if (!prior) continue; // discovered today — give it at least one day
+      if (a.followers <= prior.followers) {
+        await deleteArtist(a.id);
+        summary.pruned += 1;
+        console.log(`[refresh] pruned "${a.name}" — ${prior.followers} → ${a.followers} listeners (not growing)`);
+      }
     }
   }
 
   // ---- Phase 2: playlist-based discovery -------------------------------
-  if (!skipDiscovery) {
+  if (run.discovery) {
     try {
       const disc = await discoverFromPlaylists();
       summary.discovery = {
@@ -176,40 +188,43 @@ export async function runRefresh({ skipDiscovery = false } = {}) {
   }
 
   // ---- Phase 3: web-search each artist for tour news -------------------
-  // Brave Search surfaces links from ticketing sites (Ticketmaster, Songkick…)
-  // when an artist starts touring. We store only brand-new links.
-  let braveBlocked = false;
-  for (const a of await listArtists({ includeDismissed: false })) {
-    if (braveBlocked) break;
+  // Google search surfaces links from ticketing sites (Ticketmaster, Songkick…)
+  // when an artist starts touring. We store only brand-new links. Runs for ALL
+  // tracked artists (manual + discovered alike).
+  if (run.tours) {
+    let searchBlocked = false;
+    for (const a of await listArtists({ includeDismissed: false })) {
+      if (searchBlocked) break;
+      try {
+        const leads = await searchTourNews(a);
+        for (const lead of leads) {
+          if (await insertTourLead(lead)) summary.tours_added += 1;
+        }
+      } catch (err) {
+        if (/429|quota|rate limit/i.test(err.message)) {
+          searchBlocked = true;
+          console.warn('[refresh] Search quota hit — stopping tour-news scan for this run');
+        } else {
+          console.warn(`[refresh] tour-news search failed for "${a.name}": ${err.message}`);
+        }
+      }
+      // Gentle pacing between searches.
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    // ---- Phase 4: email any unnotified tour-news leads -----------------
     try {
-      const leads = await searchTourNews(a);
-      for (const lead of leads) {
-        if (await insertTourLead(lead)) summary.tours_added += 1;
+      const unnotified = await listUnnotifiedLeads();
+      if (unnotified.length) {
+        const sentIds = await sendTourLeadEmail(unnotified);
+        if (sentIds.length) {
+          await markLeadsNotified(sentIds);
+          summary.emails_sent = 1;
+        }
       }
     } catch (err) {
-      if (/429|quota|rate limit/i.test(err.message)) {
-        braveBlocked = true;
-        console.warn('[refresh] Search quota hit — stopping tour-news scan for this run');
-      } else {
-        console.warn(`[refresh] tour-news search failed for "${a.name}": ${err.message}`);
-      }
+      summary.errors.push(`email: ${err.message}`);
     }
-    // Gentle pacing between searches.
-    await new Promise((r) => setTimeout(r, 200));
-  }
-
-  // ---- Phase 4: email any unnotified tour-news leads -------------------
-  try {
-    const unnotified = await listUnnotifiedLeads();
-    if (unnotified.length) {
-      const sentIds = await sendTourLeadEmail(unnotified);
-      if (sentIds.length) {
-        await markLeadsNotified(sentIds);
-        summary.emails_sent = 1;
-      }
-    }
-  } catch (err) {
-    summary.errors.push(`email: ${err.message}`);
   }
 
   return summary;

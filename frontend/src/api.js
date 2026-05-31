@@ -51,6 +51,13 @@ export const api = {
       body: JSON.stringify({ skipDiscovery }),
     }),
 
+  // Run only selected phases. `phases` is { artists, discovery, tours }.
+  refreshPhases: (phases) =>
+    request('/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ phases }),
+    }),
+
   listCategories: () => request('/categories'),
 
   setCategoryEnabled: (category, enabled) =>

@@ -58,6 +58,13 @@ a:hover {
   margin: 0;
 }
 
+.refresh-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
