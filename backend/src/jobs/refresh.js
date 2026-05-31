@@ -64,10 +64,25 @@ export async function refreshOneArtist(artistId) {
 
   const fresh = await fetchFreshArtistData(stored);
 
+  // Spotify (Development Mode) systematically returns null followers. When that
+  // happens, fall back to the LIVE Last.fm listener count so manually-tracked
+  // artists also get a real number and day-over-day growth — otherwise they'd
+  // be stuck on "0 listeners / no growth data yet" forever.
+  let followers = fresh.followers;
+  if (followers == null) {
+    try {
+      const info = await getArtistInfo(stored.name);
+      if (info.listeners > 0) followers = info.listeners;
+    } catch (err) {
+      console.warn(`[refresh] Last.fm fallback failed for "${stored.name}": ${err.message}`);
+    }
+  }
+
   const now = new Date().toISOString();
   await upsertArtist({
     ...fresh,
     id: stored.id,
+    followers,
     source: stored.source,
     discovery_source: stored.discovery_source,
     added_at: stored.added_at,
@@ -75,7 +90,7 @@ export async function refreshOneArtist(artistId) {
   });
   await recordSnapshot({
     artist_id: stored.id,
-    followers: fresh.followers,
+    followers,
     popularity: fresh.popularity,
   });
 
