@@ -112,11 +112,14 @@ export async function runRefresh({ skipDiscovery = false, phases } = {}) {
   };
 
   const summary = {
+    ran: run,
     artists_refreshed: 0,
     snapshots_recorded: 0,
     pruned: 0,
     discovery: null,
+    tours_searched: 0,
     tours_added: 0,
+    tours_quota_hit: false,
     emails_sent: 0,
     errors: [],
   };
@@ -197,12 +200,14 @@ export async function runRefresh({ skipDiscovery = false, phases } = {}) {
       if (searchBlocked) break;
       try {
         const leads = await searchTourNews(a);
+        summary.tours_searched += 1;
         for (const lead of leads) {
           if (await insertTourLead(lead)) summary.tours_added += 1;
         }
       } catch (err) {
         if (/429|quota|rate limit/i.test(err.message)) {
           searchBlocked = true;
+          summary.tours_quota_hit = true;
           console.warn('[refresh] Search quota hit — stopping tour-news scan for this run');
         } else {
           console.warn(`[refresh] tour-news search failed for "${a.name}": ${err.message}`);

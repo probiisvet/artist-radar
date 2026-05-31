@@ -131,13 +131,29 @@ export default function App() {
 
       {refreshSummary && (
         <div className="banner success">
-          Refreshed {refreshSummary.artists_refreshed} tracked artists ·
-          {refreshSummary.discovery
-            ? ` discovery: +${refreshSummary.discovery.artists_added} new (from ${refreshSummary.discovery.playlists_attempted - refreshSummary.discovery.playlists_failed}/${refreshSummary.discovery.playlists_attempted} playlists) ·`
-            : ''}
-          {refreshSummary.pruned ? ` removed ${refreshSummary.pruned} not-growing ·` : ''}
-          {' '}+{refreshSummary.tours_added} tour links ·
-          emails sent: {refreshSummary.emails_sent}
+          {(() => {
+            const ran = refreshSummary.ran ?? { artists: true, discovery: true, tours: true };
+            const parts = [];
+            if (ran.artists) {
+              parts.push(`Refreshed ${refreshSummary.artists_refreshed} tracked artists`);
+              if (refreshSummary.pruned) parts.push(`removed ${refreshSummary.pruned} not-growing`);
+            }
+            if (ran.discovery && refreshSummary.discovery) {
+              const d = refreshSummary.discovery;
+              parts.push(
+                `discovery: +${d.artists_added} new (from ${d.playlists_attempted - d.playlists_failed}/${d.playlists_attempted} playlists)`,
+              );
+            }
+            if (ran.tours) {
+              parts.push(
+                `searched ${refreshSummary.tours_searched} artists for tours · +${refreshSummary.tours_added} new tour links`,
+              );
+              if (refreshSummary.tours_quota_hit)
+                parts.push('Google daily search quota reached — try again tomorrow');
+              parts.push(`emails sent: ${refreshSummary.emails_sent}`);
+            }
+            return parts.join(' · ');
+          })()}
           {refreshSummary.errors?.length ? (
             <div className="errors">
               {refreshSummary.errors.length} error(s) – check the server logs.
