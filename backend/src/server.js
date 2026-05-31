@@ -29,8 +29,11 @@ app.use('/api/tours', toursRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/diagnostic', diagnosticRouter);
 
-// POST /api/refresh — trigger a refresh on demand from the dashboard.
-app.post('/api/refresh', async (req, res, next) => {
+// /api/refresh — trigger a refresh on demand.
+// POST is used by the dashboard button. GET is also accepted so simple
+// external cron pingers (e.g. cron-job.org, which sends GET by default)
+// can hit this URL without extra configuration — otherwise they get a 404.
+async function refreshHandler(req, res, next) {
   try {
     const summary = await runRefresh({
       skipDiscovery: req.body?.skipDiscovery === true,
@@ -39,7 +42,9 @@ app.post('/api/refresh', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}
+app.post('/api/refresh', refreshHandler);
+app.get('/api/refresh', refreshHandler);
 
 // In production we ship a single web service: Express also serves the
 // built React app from frontend/dist. In dev, that folder doesn't exist
