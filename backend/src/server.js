@@ -29,11 +29,9 @@ app.use('/api/tours', toursRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/diagnostic', diagnosticRouter);
 
-// /api/refresh — trigger a refresh on demand.
-// POST is used by the dashboard button. GET is also accepted so simple
-// external cron pingers (e.g. cron-job.org, which sends GET by default)
-// can hit this URL without extra configuration — otherwise they get a 404.
-async function refreshHandler(req, res, next) {
+// POST /api/refresh — dashboard button. Runs synchronously and returns the
+// full summary so the UI can show "refreshed N artists, +X tours…".
+app.post('/api/refresh', async (req, res, next) => {
   try {
     const summary = await runRefresh({
       skipDiscovery: req.body?.skipDiscovery === true,
@@ -42,9 +40,18 @@ async function refreshHandler(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-app.post('/api/refresh', refreshHandler);
-app.get('/api/refresh', refreshHandler);
+});
+
+// GET /api/refresh — external cron pingers (cron-job.org sends GET by default).
+// A full refresh takes minutes — far longer than a cron pinger's ~30s timeout —
+// so we kick it off in the background and respond 202 immediately. This avoids
+// the "Failed (timeout)" status while the refresh still completes server-side.
+app.get('/api/refresh', (req, res) => {
+  res.status(202).json({ started: true, at: new Date().toISOString() });
+  runRefresh()
+    .then((summary) => console.log('[cron-http] refresh complete', summary))
+    .catch((err) => console.error('[cron-http] refresh failed:', err));
+});
 
 // In production we ship a single web service: Express also serves the
 // built React app from frontend/dist. In dev, that folder doesn't exist
