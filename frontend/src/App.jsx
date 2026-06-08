@@ -15,6 +15,7 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('emerging');
+  const [sortBy, setSortBy] = useState('growth');
   const [artists, setArtists] = useState([]);
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +101,41 @@ export default function App() {
     if (tab === 'tracked') return artists.filter((a) => !a.dismissed);
     return [];
   }, [tab, artists]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    const num = (v) => (v == null ? null : Number(v));
+    // Push null/missing values to the bottom regardless of sort direction.
+    const nullsLast = (a, b, cmp) => {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return cmp;
+    };
+    switch (sortBy) {
+      case 'growth':
+        list.sort((a, b) => {
+          const ga = num(a.followers_growth_pct);
+          const gb = num(b.followers_growth_pct);
+          return nullsLast(ga, gb, gb - ga); // highest growth first
+        });
+        break;
+      case 'listeners_desc':
+        list.sort((a, b) => nullsLast(num(a.followers), num(b.followers), num(b.followers) - num(a.followers)));
+        break;
+      case 'listeners_asc':
+        list.sort((a, b) => nullsLast(num(a.followers), num(b.followers), num(a.followers) - num(b.followers)));
+        break;
+      case 'name':
+        list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        break;
+      case 'added':
+      default:
+        // API already returns newest-added first; keep that order.
+        break;
+    }
+    return list;
+  }, [filtered, sortBy]);
 
   const tourCount = tours.length;
   const emergingCount = artists.filter((a) => !a.dismissed && a.is_emerging).length;
@@ -191,14 +227,31 @@ export default function App() {
         ) : tab === 'discovery' ? (
           <Categories />
         ) : (
-          <ArtistList
-            artists={filtered}
-            onDismiss={onDismiss}
-            onRemove={onRemove}
-            onRefresh={onRefreshArtist}
-            refreshingIds={refreshingIds}
-            view={tab}
-          />
+          <>
+            {sorted.length > 0 && (
+              <div className="list-toolbar">
+                <span className="muted">{sorted.length} artist{sorted.length === 1 ? '' : 's'}</span>
+                <label className="sort-control">
+                  Sort by{' '}
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                    <option value="growth">Growth (high → low)</option>
+                    <option value="listeners_desc">Listeners (high → low)</option>
+                    <option value="listeners_asc">Listeners (low → high)</option>
+                    <option value="name">Name (A → Z)</option>
+                    <option value="added">Recently added</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            <ArtistList
+              artists={sorted}
+              onDismiss={onDismiss}
+              onRemove={onRemove}
+              onRefresh={onRefreshArtist}
+              refreshingIds={refreshingIds}
+              view={tab}
+            />
+          </>
         )}
       </main>
 

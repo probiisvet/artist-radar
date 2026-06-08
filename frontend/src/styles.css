@@ -65,6 +65,28 @@ a:hover {
   justify-content: flex-end;
 }
 
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.sort-control {
+  color: var(--muted);
+  font-size: 14px;
+}
+.sort-control select {
+  margin-left: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--card, #1b1f2a);
+  color: inherit;
+  border: 1px solid var(--border, #2a2f3a);
+  cursor: pointer;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
